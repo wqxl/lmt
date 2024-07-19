@@ -78,6 +78,9 @@
 #define PROC_FS_LUSTRE_OSD_ZFS_BRW_STATS "fs/lustre/osd-zfs/%s/brw_stats"
 #define DEBUGFS_OST_BRW_STATS     "kernel/debug/lustre/osd-zfs/%s/brw_stats"
 
+#define PROC_FS_LUSTRE_OSD_LDISKFS_BRW_STATS "fs/lustre/osd-ldiskfs/%s/brw_stats"
+#define DEBUGFS_OST_LDISKFS_BRW_STATS     "kernel/debug/lustre/osd-ldiskfs/%s/brw_stats"
+
 #define PROC_FS_LUSTRE_OST_RECOVERY_STATUS \
                                         "fs/lustre/obdfilter/%s/recovery_status"
 #define PROC_FS_LUSTRE_MDT_RECOVERY_STATUS \
@@ -99,6 +102,13 @@
                     "fs/lustre/ldlm/namespaces/mds-%s_UUID/pool/grant_rate"
 #define PROC_FS_LUSTRE_MDT_LDLM_CANCEL_RATE \
                     "fs/lustre/ldlm/namespaces/mds-%s_UUID/pool/cancel_rate"
+
+#define PROC_FS_LUSTRE_MDT_LDLM_LOCK_COUNT_2_15 \
+                    "fs/lustre/ldlm/namespaces/mdt-%s_UUID/lock_count"
+#define PROC_FS_LUSTRE_MDT_LDLM_GRANT_RATE_2_15 \
+                    "fs/lustre/ldlm/namespaces/mdt-%s_UUID/pool/grant_rate"
+#define PROC_FS_LUSTRE_MDT_LDLM_CANCEL_RATE_2_15 \
+                    "fs/lustre/ldlm/namespaces/mdt-%s_UUID/pool/cancel_rate"
 
 #define PROC_FS_LUSTRE_VERSION          "fs/lustre/version"
 
@@ -481,10 +491,15 @@ proc_lustre_ldlm_lock_count (pctx_t ctx, char *name, uint64_t *np)
     uint64_t n = 0;
     char *tmpl;
 
+    int lustre_version = _packed_lustre_version (ctx);
+
     if (strstr (name, "-OST")) {
         tmpl = PROC_FS_LUSTRE_OST_LDLM_LOCK_COUNT;
     } else if (strstr (name, "-MDT")) {
-        tmpl = PROC_FS_LUSTRE_MDT_LDLM_LOCK_COUNT;
+        if (lustre_version >= LUSTRE_2_15)
+            tmpl = PROC_FS_LUSTRE_MDT_LDLM_LOCK_COUNT_2_15;
+        else
+            tmpl = PROC_FS_LUSTRE_MDT_LDLM_LOCK_COUNT;
     } else {
         errno = EINVAL;
         goto done;
@@ -509,10 +524,15 @@ proc_lustre_ldlm_grant_rate (pctx_t ctx, char *name, uint64_t *np)
     uint64_t n = 0;
     char *tmpl;
 
+    int lustre_version = _packed_lustre_version (ctx);
+
     if (strstr (name, "-OST")) {
         tmpl = PROC_FS_LUSTRE_OST_LDLM_GRANT_RATE;
     } else if (strstr (name, "-MDT")) {
-        tmpl = PROC_FS_LUSTRE_MDT_LDLM_GRANT_RATE;
+        if (lustre_version >= LUSTRE_2_15)
+            tmpl = PROC_FS_LUSTRE_MDT_LDLM_GRANT_RATE_2_15;
+        else
+            tmpl = PROC_FS_LUSTRE_MDT_LDLM_GRANT_RATE;
     } else {
         errno = EINVAL;
         goto done;
@@ -537,10 +557,15 @@ proc_lustre_ldlm_cancel_rate (pctx_t ctx, char *name, uint64_t *np)
     uint64_t n = 0;
     char *tmpl;
 
+    int lustre_version = _packed_lustre_version (ctx);
+
     if (strstr (name, "-OST")) {
         tmpl = PROC_FS_LUSTRE_OST_LDLM_CANCEL_RATE;
     } else if (strstr (name, "-MDT")) {
-        tmpl = PROC_FS_LUSTRE_MDT_LDLM_CANCEL_RATE;
+        if (lustre_version >= LUSTRE_2_15)
+            tmpl = PROC_FS_LUSTRE_MDT_LDLM_CANCEL_RATE_2_15;
+        else
+            tmpl = PROC_FS_LUSTRE_MDT_LDLM_CANCEL_RATE;
     } else {
         errno = EINVAL;
         goto done;
@@ -684,6 +709,8 @@ proc_lustre_osclist (pctx_t ctx, List *lp)
     
     if (((lustre_version >= LUSTRE_1_8) && (lustre_version <= LUSTRE_2_10_8)) ||
             lustre_version < 0)
+        osc_dir = PROC_FS_LUSTRE_OSC_DIR;
+    else if (lustre_version >= LUSTRE_2_15)
         osc_dir = PROC_FS_LUSTRE_OSC_DIR;
     else
         osc_dir = DEBUGFS_OSP_DIR;
@@ -1335,12 +1362,19 @@ proc_lustre_brwstats (pctx_t ctx, char *name, brw_t t, histogram_t **hp)
     histogram_t *h = NULL;
     int lustre_version = _packed_lustre_version (ctx);
     char *fs_lustre_ost_brw_stats = NULL;
-    
+
+    static int backfs_type = BACKFS_ZFS;
+    if (lustre_version >= LUSTRE_2_15) {
+        backfs_type = _find_lustre_backfs_type (ctx);
+    }
+
     if (((lustre_version >= LUSTRE_1_8) && (lustre_version <= LUSTRE_2_10_8)) ||
             lustre_version < 0)
         fs_lustre_ost_brw_stats = PROC_FS_LUSTRE_OST_BRW_STATS;
     else if ((lustre_version > LUSTRE_2_10_8) && (lustre_version < LUSTRE_2_15))
         fs_lustre_ost_brw_stats = PROC_FS_LUSTRE_OSD_ZFS_BRW_STATS;
+    else if ((backfs_type == BACKFS_LDISKFS) && (lustre_version >= LUSTRE_2_15))
+        fs_lustre_ost_brw_stats = DEBUGFS_OST_LDISKFS_BRW_STATS;
     else
         fs_lustre_ost_brw_stats = DEBUGFS_OST_BRW_STATS;
         
@@ -1363,4 +1397,4 @@ done:
 /*
  * vi:tabstop=4 shiftwidth=4 expandtab
  */
-
+ 
